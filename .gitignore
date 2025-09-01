@@ -1,0 +1,90 @@
+# PacketRoot .gitignore
+
+# Output directories
+output/
+results/
+
+# PCAP files (except in tests directory)
+*.pcap
+!tests/test_data/*.pcap
+*.pcapng
+!tests/test_data/*.pcapng
+*.cap
+
+# Log files
+*.log
+*.txt.log
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Editor files
+.vscode/
+.idea/
+*.sublime-*
+
+# Python cache (if any Python scripts are added)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Ruby cache (for zsteg and other gems)
+.bundle/
+vendor/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Compressed files that might be extracted
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# Binary executables
+*.exe
+*.dll
+*.bin
+
+# Core dumps
+core
+*.core
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Large data files
+*.dump
+*.dmp
+
+# Test files (if any)
+test_captures/
+test_output/
+
+# Documentation build artifacts
+docs/_build/
+*.pdf
+
+# IDE and editor specific
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local configuration
+config.local
+.env
