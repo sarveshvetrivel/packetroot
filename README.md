@@ -1,268 +1,239 @@
-PacketRoot is a powerful, open-source toolkit designed for comprehensive
-forensic analysis of PCAP/PCAPNG files. Built with security researchers,
-network analysts, and CTF players in mind, it combines multiple analysis
-tools into a single, streamlined interface with powerful automation
-capabilities.
+# PCAP/PCAPNG Forensic & CTF Analysis Toolkit
 
-## 🚀 Quick Start
+A comprehensive command-line utility for packet capture analysis, forensic investigation, and CTF challenges. Designed for security professionals, CTF players, and digital forensics experts.
+
+## Key Features
+
+- **Comprehensive Analysis**: Single-command analysis of PCAP/PCAPNG files
+- **Interactive Mode**: Guided menu (`-i`) for beginners and CTF players
+- **Smart Dependency Checks**: Verifies required tools, warns on optional ones
+- **Clear Status Output**: Color-coded console messages (INFO, WARN, ERROR, SUCCESS)
+- **Extended Reports**: Enhanced summary with protocol stats, warnings, extracted files, CTF hits, timeline events, and streams
+- **Automated Workflow**: Automated multi-phase analysis pipeline
+- **Modular Design**: Each module can be run individually or as part of the full workflow
+- **Cross-Platform**: Works on Linux and macOS (with some limitations on Windows via WSL)
+- **Security-Focused**: Built with strict shell practices and safe execution in mind
+
+## Core Capabilities
+
+### Metadata & File Information
+- File metadata extraction with `capinfos`
+- Magic number and MIME type identification
+
+### Protocol & Traffic Analysis
+- I/O statistics
+- Protocol hierarchy
+- Endpoints (IP, TCP, UDP)
+- Conversations (IP, TCP, UDP)
+- ARP, ICMP, DNS, HTTP, TLS, FTP, SMTP, SMB statistics
+
+### Security & IDS Analysis
+- Zeek logs (if available)
+- Suricata alerts (if available)
+- Anomaly and suspicious traffic indicators
+
+### File Carving & Object Extraction
+- Data carving with `foremost` and `binwalk`
+- Export protocol objects (HTTP, DNS, TLS, FTP, SMTP, SMB)
+- Reassembly of TCP/UDP streams
+
+### CTF & Investigation Tools
+- Keyword/flag search across payloads (`-c <pattern>`)
+- Organized results saved under `ctf/`
+
+### Timeline Analysis
+- Always generates a chronological timeline of packets
+- Output saved in `timeline/events.txt`
+
+### Extended Analyses
+- ICMP analysis
+- VoIP analysis (SIP, RTP)
+- Entropy analysis
+
+## Core Analysis Tools
+
+- `tshark` – Protocol and traffic analysis
+- `capinfos` – File metadata
+- `editcap` – Packet trimming
+- `foremost` – File carving and recovery
+- `binwalk` – Binary carving and embedded data extraction
+- `zeek` – IDS and protocol analysis
+- `suricata` – IDS and anomaly detection
+- `yara` – Pattern and malware rule matching
+- `strings` – Text extraction
+- `xxd` – Hexadecimal dump
+- `file` – File type identification
+
+Each tool is carefully integrated to maximize forensic insight and capture hidden data in network traffic.
+
+## Installation
 
 ### Prerequisites
+- Linux or macOS (Windows via WSL)
+- Git
+- `sudo` privileges for installing dependencies
 
--   Linux (Ubuntu/Debian, CentOS/RHEL, or Arch Linux recommended)
--   Bash 4.2 or higher
--   Root/sudo access for installation
+### Step-by-Step Installation
 
-### Installation
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/yourusername/yourproject.git
+   cd yourproject
+   ```
 
-``` bash
-# Clone the repository
-git clone https://github.com/sarveshvetrivel/packetroot.git
-cd packetroot
+2. **Make the script executable**:
+   ```bash
+   chmod +x source.sh install_requirements.sh
+   ```
 
-# Give proper privilege
-chmod +x install.sh
-chmod +x packetroot.sh
+3. **Install dependencies**:
+   ```bash
+   sudo ./install_requirements.sh
+   ```
 
-# Install dependencies (requires sudo)
-sudo ./install.sh --full
+### Post-Installation
 
+Optionally add to PATH:
+```bash
+echo 'export PATH="$PATH:'$(pwd)'"' >> ~/.bashrc
+source ~/.bashrc
 ```
+
+## 🛠️ Usage Guide
 
 ### Basic Usage
 
-``` bash
-# Basic analysis
-./packetroot.sh capture.pcap
-
-# Quick analysis (metadata only)
-./packetroot.sh -quick capture.pcap
-
-# CTF mode with flag pattern
-./packetroot.sh -ctf "FLAG{" ctf_challenge.pcap
-
-# Deep analysis (all modules)
-./packetroot.sh -deep forensic_capture.pcap
+Analyze a capture file with default settings:
+```bash
+./source.sh capture.pcap
 ```
 
-## ✨ Why PacketRoot?
-
--   **All-in-One Solution**: Combines multiple network analysis tools
-    into a single workflow
--   **CTF Optimized**: Built-in support for common CTF challenges and
-    flag formats
--   **Comprehensive Analysis**: From basic metadata to advanced protocol
-    analysis
--   **User-Friendly**: Color-coded output and intuitive interface
--   **Extensible**: Easily add custom analysis modules and scripts
-
-## 🔍 Key Features
-
-### 🌐 Traffic Analysis
-
--   **Protocol Analysis**
-    -   Complete protocol hierarchy and distribution
-    -   Top talkers and conversations (IP/MAC)
-    -   Port scanning and suspicious activity detection
-    -   DNS query/response correlation
-    -   HTTP/HTTPS transaction analysis
-    -   SSL/TLS certificate inspection and validation
--   **Advanced Traffic Analysis**
-    -   GeoIP mapping of IP addresses
-    -   Bandwidth usage and throughput analysis
-    -   Flow reconstruction and analysis
--   **Security & Forensics**
-    -   Suspicious pattern detection
-    -   Known IOCs (Indicators of Compromise) matching
-    -   Anomaly detection in network behavior
-    -   Credential hunting in plaintext protocols
-    -   Malware traffic pattern identification
--   **CTF & Investigation Tools**
-    -   Custom keyword/flag pattern matching
-    -   File carving with multiple tools (binwalk, foremost, scalpel)
-    -   Steganography detection in images and network streams
-    -   Timeline generation of network events
-    -   Extracted file analysis and classification
-
-### 🏆 CTF Features
-
--   **Keyword Search**: Hunt for CTF flags across extracted data
--   **Stream Analysis**: Reassemble and analyze network streams
--   **File Recovery**: Extract embedded files from network traffic
--   **Timeline Generation**: Create chronological event timeline
-
-## 🛠 Installation
-
-### Installation Options
-
-#### 1. Full Installation (Recommended)
-
-``` bash
-# Clone the repository
-git clone https://github.com/sarveshvetrivel/packetroot.git
-cd packetroot
-
-# Run the installation script (interactive)
-sudo ./install.sh
-
+Example:
+```bash
+./source.sh network-dump.pcapng
 ```
 
-#### 2. Minimal Installation (Lightweight)
+### Command-Line Options
 
-``` bash
-# Install only essential dependencies
-sudo ./install.sh --minimal
+```
+Usage: ./source.sh [OPTIONS] <file>
+
+Options:
+  -q, --quick        Quick analysis (metadata + traffic stats)
+  -d, --deep         Deep analysis (all modules)
+  -c, --ctf PATTERN  Search for flag/keyword patterns (saved in ctf/)
+  -o, --output DIR   Specify custom output directory
+  -i, --interactive  Interactive guided menu
+  -parallel          Run certain analyses in parallel
+  -config FILE       Use custom configuration file
+  -h, --help         Show this help message
 ```
 
-#### Optional Dependencies (Recommended for Full Functionality)
+### Interactive Mode
 
--   **File Carving & Analysis**
-    -   `binwalk` - Advanced file carving
-    -   `foremost` - File recovery
-    -   `scalpel` - File carving alternative
-    -   `exiftool` - Metadata extraction
-    -   `p7zip` - Archive extraction
--   **Security & Forensics**
-    -   `zeek` (formerly Bro) - Network analysis framework
-    -   `suricata` - Intrusion detection
-    -   `yara` - Pattern matching
-    -   `hashcat` - Password cracking
--   **Media & Steganography**
-    -   `steghide` - Steganography detection
-    -   `stegsolve` - Image analysis
-    -   `exiv2` - Image metadata
-    -   `ffmpeg` - Media analysis
--   **Visualization**
-    -   `gnuplot` - Graph generation
-    -   `graphviz` - Network diagrams
-    -   `python3-matplotlib` - Data visualization
-
-## 💻 Usage
-
-### Basic Analysis
-
-``` bash
-# Basic analysis with default options
-./packetroot.sh capture.pcap
-
-# Quick analysis (metadata and basic stats only)
-./packetroot.sh --quick capture.pcap
-
-# Deep analysis with all modules
-./packetroot.sh --deep capture.pcap
-
-# Specify output directory
-./packetroot.sh -o ./analysis_results capture.pcap
+Start guided analysis with:
+```bash
+./source.sh -i file.pcap
 ```
 
-## 🤝 Contributing
+**Example Menu:**
+```
+===== Interactive Analysis Menu =====
+1) Metadata Analysis
+2) Protocol Statistics
+3) Protocol Extraction
+4) Security Findings (Zeek/Suricata)
+5) File Carving
+6) Stream Extraction
+7) ICMP Analysis
+8) VoIP Analysis
+9) Entropy Analysis
+10) CTF / Keyword Search
+11) Run All Modules
+12) View Summary
+0) Exit
+```
 
-We welcome contributions from the community! Whether you're a developer,
-security researcher, or just passionate about network forensics, there
-are many ways to contribute.
+Features of interactive mode:
+- Run specific modules individually
+- Execute the full pipeline in one step
+- On-demand summary view
+- Skip, retry, or repeat analyses without restarting
 
-### How to Contribute
+## Output Structure
 
-1.  **Report Issues**
-    -   Check existing issues before creating a new one
-    -   Provide detailed reproduction steps
-    -   Include sample PCAPs when possible (sanitized if needed)
-2.  **Submit Pull Requests**
-    -   Fork the repository and create a feature branch
-    -   Follow the existing code style and conventions
-    -   Include tests for new functionality
-    -   Update documentation as needed
-    -   Submit a pull request with a clear description
-3.  **Enhance Documentation**
-    -   Improve existing documentation
-    -   Add usage examples
-    -   Translate documentation to other languages
+The tool creates an organized directory for each session:
 
-### Pull Request Process
+```
+output/
+└── capture_YYYYMMDD_HHMMSS/
+    ├── reports/
+    │   ├── summary.txt
+    │   ├── protocol_hierarchy.txt
+    │   ├── ip_endpoints.txt
+    │   └── traffic_stats.txt
+    │
+    ├── protocols/
+    │   ├── http/
+    │   ├── dns/
+    │   └── tls/
+    │
+    ├── carved/
+    │   ├── binwalk/
+    │   └── foremost/
+    │
+    ├── streams/
+    │   ├── tcp/
+    │   └── udp/
+    │
+    ├── timeline/
+    │   └── events.txt
+    │
+    ├── ctf/   (only if CTF search is run)
+    │   └── ctf_search_results.txt
+    │
+    └── index.md
+```
 
-1.  Fork the repository
-2.  Create a feature branch (`git checkout -b feature/amazing-feature`)
-3.  Commit your changes (`git commit -am 'Add some amazing feature'`)
-4.  Push to the branch (`git push origin feature/amazing-feature`)
-5.  Open a Pull Request
+## License
 
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-### Core Dependencies
+## Contributing
 
--   [Wireshark](https://www.wireshark.org/) - Network protocol analyzer
--   [TShark](https://www.wireshark.org/docs/wsug_html_chunked/AppToolstshark.html) -
-    CLI network protocol analyzer
--   [Scapy](https://scapy.net/) - Packet manipulation library
--   [PyShark](https://github.com/KimiNewt/pyshark) - Python wrapper for
-    TShark
--   [YARA](https://virustotal.github.io/yara/) - Pattern matching tool
--   [Binwalk](https://github.com/ReFirmLabs/binwalk) - Firmware analysis
-    tool
+We welcome contributions! Please follow these guidelines:
 
-### Community & Support
+1. Fork and clone:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
 
-Special thanks to all contributors, testers, and community members who
-have helped improve PacketRoot.
+2. Development:
+   - Use `shellcheck` for code quality
+   - Follow POSIX shell best practices
+   - Add error handling and comments
+   - Test with various PCAP/PCAPNG files
+   - Update docs as needed
 
+3. Submit changes:
+   ```bash
+   git commit -m "feat: add new analysis module"
+   git push origin feature/your-feature-name
+   ```
+   Then create a Pull Request with clear details.
 
-## 📊 Output Structure
+## Security
 
-PacketRoot organizes analysis results in a structured directory format:
+To report security vulnerabilities:
 
-    output/
-    ├── capture_20230815_143022/       # Timestamped analysis directory
-    │   ├── reports/                   # Analysis reports and statistics
-    │   │   ├── summary.txt           # Executive summary
-    │   │   ├── traffic_analysis.txt   # Traffic analysis
-    │   │   ├── protocol_stats.json    # Protocol distribution
-    │   │   └── security_findings.txt  # Security-related findings
-    │   │
-    │   ├── protocols/                 # Protocol-specific extractions
-    │   │   ├── http/                  # HTTP requests/responses
-    │   │   │   ├── requests/         # Individual HTTP requests
-    │   │   │   └── responses/        # Individual HTTP responses
-    │   │   ├── dns/                  # DNS queries/responses
-    │   │   └── tls/                  # TLS/SSL certificates
-    │   │
-    │   ├── extracted/                # Extracted files and objects
-    │   │   ├── http_objects/         # Files from HTTP traffic
-    │   │   ├── dns_objects/          # Files from DNS exfiltration
-    │   │   └── carved_files/         # Files carved from raw traffic
-    │   │
-    │   ├── streams/                  # Reassembled network streams
-    │   │   ├── tcp/                  # TCP streams
-    │   │   └── udp/                  # UDP streams
-    │   │
-    │   ├── logs/                     # Tool-specific log files
-    │   ├── timeline/                 # Timeline analysis
-    │   └── index.html                # HTML report (if generated)
+1. **DO NOT** open public issues for security vulnerabilities
+2. Email the maintainers directly
+3. Include detailed descriptions and steps to reproduce
+4. We will respond within 48 hours with next steps
 
+## Support
 
-## 📜 License
-
-PacketRoot is licensed under the Apache License 2.0 - see the
-[LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
--   TShark and Wireshark for powerful packet analysis
--   Zeek (formerly Bro) for network security monitoring
--   The open-source community for valuable tools and libraries
-
-## 📚 Resources
-
-### Related Projects
-
--   [NetworkMiner](https://www.netresec.com/?page=NetworkMiner) -
-    Network Forensic Analysis Tool
--   [Xplico](https://www.xplico.org/) - Network Forensic Analysis Tool
--   [Moloch](https://github.com/aol/moloch) - Large scale IPv4 packet
-    capturing
--   [Zeek](https://zeek.org/) - Network analysis framework
-
-### Learning Resources
-
--   [Wireshark University](https://www.wireshark.org/learn/)
--   [PacketTotal](https://packettotal.com/) - PCAP analysis in the cloud
--   [Malware-Traffic-Analysis.net](https://www.malware-traffic-analysis.net/) -
-    PCAP exercises and
-    challenges\](https://www.wireshark.org/docs/wsug_html_chunked/)
+For issues, requests, or questions:
+1. Check the [Issues](https://github.com/yourusername/yourproject/issues) page
+2. Open a new issue with details
+3. Follow the issue template guidelines
