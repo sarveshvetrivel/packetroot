@@ -57,6 +57,7 @@ readonly NC='\033[0m'  # No Color
 declare -a MISSING_TOOLS=()
 declare -a CTF_KEYWORDS=()
 declare -a PROTOCOLS=()
+declare -a MISSING_OPTIONAL_TOOLS=()
 declare -g OUTPUT_DIR=""
 declare -g INPUT_FILE=""
 declare -g TIMELINE_MODE="false"
@@ -66,6 +67,12 @@ declare -g CONFIG_FILE="$SCRIPT_DIR/packetroot.conf"
 declare -g RUN_ICMP="false"
 declare -g RUN_VOIP="false"
 declare -g RUN_ENTROPY="false"
+# Additional modes & user-configurable globals
+declare -g MODE="normal"          # quick | deep | normal
+declare -g CTF_PATTERN=""         # single pattern via -c/--ctf (legacy)
+declare -g CUSTOM_OUTPUT_DIR=""   # override output dir via -o/--output
+declare -g INTERACTIVE_MODE="false" # -i / --interactive
+
 
 # Cleanup function to be called on script exit
 declare -a CLEANUP_FILES=()
@@ -156,12 +163,19 @@ create_output_structure() {
     local basename
     basename=$(basename "$input_file" | sed 's/\.[^.]*$//')
     
-    OUTPUT_DIR="${OUTPUT_BASE_DIR}/${basename}_${TIMESTAMP}"
+    if [[ -n "${CUSTOM_OUTPUT_DIR:-}" ]]; then
+        # Use absolute path if provided
+        OUTPUT_DIR="$(realpath -m "${CUSTOM_OUTPUT_DIR}/${basename}_${TIMESTAMP}")"
+    else
+        OUTPUT_DIR="${OUTPUT_BASE_DIR}/${basename}_${TIMESTAMP}"
+    fi
     
-    if ! mkdir -p "$OUTPUT_DIR"/{reports,protocols,objects,streams,carved,zeek,suricata,misc,icmp_analysis,voip_analysis,exports,entropy_analysis,timeline}; then
-        print_status "ERROR" "Failed to create output directory structure"
+        # Create a minimal set of directories; others will be created when modules run
+    if ! mkdir -p "${OUTPUT_DIR}/reports" "${OUTPUT_DIR}/timeline"; then
+        print_status "ERROR" "Failed to create minimal output directories"
         return 1
     fi
+
     
     print_status "SUCCESS" "Output directory created: $OUTPUT_DIR"
 }
@@ -576,62 +590,6 @@ export_results() {
     esac
 }
 
-# --- NEW FUNCTION: Generate Interactive Timeline ---
-generate_timeline_html() {
-    local timeline_file="$OUTPUT_DIR/misc/timeline.txt"
-    local html_file="$OUTPUT_DIR/timeline/interactive_timeline.html"
-    mkdir -p "$OUTPUT_DIR/timeline"
-
-    if [[ ! -f "$timeline_file" ]]; then
-        print_status "WARN" "Timeline data not available, skipping interactive timeline generation"
-        return 1
-    fi
-
-    print_status "INFO" "Generating interactive HTML timeline..."
-
-    cat > "$html_file" << 'EOF'
-<!DOCTYPE html>
-<html>
-<head>
-<title>PacketRoot Interactive Timeline</title>
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-<style>
-body { font-family: Arial, sans-serif; margin: 20px; }
-.header { text-align: center; margin-bottom: 20px; }
-</style>
-</head>
-<body>
-<div class="header">
-<h1>Network Traffic Timeline</h1>
-<p>Interactive visualization of packet flow over time</p>
-</div>
-<div id="timeline" style="width:100%;height:600px;"></div>
-<script>
-// Sample visualization - replace with actual timeline data parsing
-var trace = {
-    x: ['2025-01-01 00:00', '2025-01-01 01:00', '2025-01-01 02:00'],
-    y: [100, 150, 80],
-    type: 'scatter',
-    mode: 'lines+markers',
-    name: 'Packet Traffic'
-};
-
-var data = [trace];
-var layout = {
-    title: 'Packet Traffic Over Time',
-    xaxis: {title: 'Time'},
-    yaxis: {title: 'Packets per Minute'}
-};
-
-Plotly.newPlot('timeline', data, layout);
-</script>
-</body>
-</html>
-EOF
-
-    print_status "SUCCESS" "Generated interactive timeline at $html_file"
-}
-
 # --- NEW FUNCTION: Load Plugins ---
 load_plugins() {
     local plugin_dir="$SCRIPT_DIR/plugins"
@@ -715,6 +673,115 @@ run_parallel() {
     wait
     
     print_status "INFO" "Parallel analysis modules completed"
+}
+
+interactive_menu() {
+    local file="${1:-$INPUT_FILE}"
+
+    # Ensure input file resolved
+    if [[ -z "$file" ]]; then
+        print_status "ERROR" "No input file specified for interactive menu"
+        return 1
+    fi
+
+    # Ensure output structure exists before menu actions
+    if [[ -z "$OUTPUT_DIR" || ! -d "$OUTPUT_DIR" ]]; then
+        create_output_structure "$file" || { print_status "ERROR" "Failed to create output dir"; return 1; }
+    fi
+
+    # Menu loop
+    while true; do
+        echo
+        print_banner "Interactive Menu" "$CYAN"
+        echo "1) Metadata analysis"
+        echo "2) Protocol statistics (traffic)"
+        echo "3) Protocol extraction"
+        echo "4) Security/IDS findings (Zeek/Suricata)"
+        echo "5) File carving"
+        echo "6) Stream reassembly / extraction"
+        echo "7) Media & steganography analysis"
+        echo "8) CTF / Keyword search"
+        echo "9) Timeline generation"
+        echo "10) Run all modules (quick/deep obeyed)"
+        echo "11) View summary"
+        echo "0) Exit interactive mode"
+        echo
+
+        read -p "Select an option [0-11]: " choice
+        case "$choice" in
+            1)
+                extract_metadata "$file"
+                ;;
+            2)
+                analyze_traffic "$file"
+                ;;
+            3)
+                extract_protocols "$file"
+                ;;
+            4)
+                run_ids_analysis "$file"
+                ;;
+            5)
+                carve_files "$file"
+                ;;
+            6)
+                reassemble_streams "$file"
+                ;;
+            7)
+                analyze_media_steg "$file"
+                ;;
+            8)
+                # prompt for ad-hoc keyword if none passed
+                if [[ ${#CTF_KEYWORDS[@]} -gt 0 ]]; then
+                    search_ctf_keywords "$file"
+                else
+                    read -p "Enter keyword/pattern to search for: " user_kw
+                    if [[ -n "$user_kw" ]]; then
+                        CTF_KEYWORDS+=("$user_kw")
+                        search_ctf_keywords "$file"
+                    else
+                        print_status "WARN" "No keyword supplied"
+                    fi
+                fi
+                ;;
+            9)
+                generate_timeline "$file"
+                ;;
+            10)
+                # Run full analysis respecting quick/deep mode
+                if [[ "$MODE" == "quick" || "$quick_mode" == "true" ]]; then
+                    print_status "INFO" "Running QUICK analysis..."
+                    extract_metadata "$file"
+                    analyze_traffic "$file"
+                    reassemble_streams "$file"
+                    search_ctf_keywords "$file"
+                else
+                    print_status "INFO" "Running FULL analysis..."
+                    extract_metadata "$file"
+                    analyze_traffic "$file"
+                    extract_protocols "$file"
+                    reassemble_streams "$file"
+                    carve_files "$file"
+                    analyze_media_steg "$file"
+                    run_ids_analysis "$file"
+                    search_ctf_keywords "$file"
+                    analyze_entropy "$file"
+                    generate_timeline "$file"
+                fi
+                ;;
+            11)
+                generate_summary
+                less "${OUTPUT_DIR}/summary.txt"
+                ;;
+            0)
+                print_status "INFO" "Exiting interactive mode"
+                break
+                ;;
+            *)
+                print_status "WARN" "Invalid selection: $choice"
+                ;;
+        esac
+    done
 }
 
 # Function to extract file metadata with comprehensive error handling
@@ -1308,6 +1375,11 @@ run_ids_analysis() {
 # Function to search for CTF keywords
 search_ctf_keywords() {
     local input_file="$1"
+
+    # Backwards compatibility wrapper: if single CTF_PATTERN passed via -c/--ctf
+    if [[ -n "${CTF_PATTERN:-}" ]] && [[ ${#CTF_KEYWORDS[@]} -eq 0 ]]; then
+        CTF_KEYWORDS+=("$CTF_PATTERN")
+    fi
     
     if [[ ${#CTF_KEYWORDS[@]} -eq 0 ]]; then
         return 0
@@ -1383,23 +1455,18 @@ search_ctf_keywords() {
 
 # Function to generate timeline
 generate_timeline() {
-    local input_file="$1"
-    
-    print_status "INFO" "Starting timeline generation..."
-    
-    local misc_dir="$OUTPUT_DIR/misc"
-    if ! mkdir -p "$misc_dir"; then
-        print_status "ERROR" "Failed to create misc directory"
-        return 1
-    fi
-    
-    if check_tool "tshark"; then
-        local timeline_cmd="tshark -r \"$input_file\" -T fields -e frame.time -e ip.src -e ip.dst -e frame.protocols -e frame.len | sort"
-        run_command "$timeline_cmd" "$misc_dir/timeline.txt" "Chronological timeline generation"
-        print_status "SUCCESS" "Timeline generation completed"
-    else
-        print_status "ERROR" "tshark not available - skipping timeline generation"
-    fi
+    local input_file="${1:-$INPUT_FILE}"
+    local out_file="$OUTPUT_DIR/timeline/events.txt"
+    mkdir -p "$OUTPUT_DIR/timeline"
+
+    print_status "INFO" "Generating timeline (text)..."
+    tshark -r "$input_file" -T fields \
+           -e frame.number -e frame.time_epoch \
+           -e ip.src -e ip.dst -e frame.len \
+        | awk '{printf "%s | %s | %s -> %s | len=%s\n", $1, strftime("%Y-%m-%d %H:%M:%S", $2), $3, $4, $5}' \
+        > "$out_file"
+
+    print_status "SUCCESS" "Timeline generated: $out_file"
 }
 
 # Function to generate summary report
@@ -1446,6 +1513,36 @@ generate_summary() {
         if [[ -f "$OUTPUT_DIR/reports/io_stats.txt" ]]; then
             echo "Traffic Statistics:"
             head -10 "$OUTPUT_DIR/reports/io_stats.txt" 2>/dev/null || echo "No stats available"
+        fi
+
+                echo "" >> "$summary_file"
+        echo "=== ENHANCED SUMMARY ===" >> "$summary_file"
+
+        # Top 10 protocols (if protocol hierarchy exists)
+        if [[ -f "$OUTPUT_DIR/reports/protocol_hierarchy.txt" ]]; then
+            echo "Top protocol stats (top 10):" >> "$summary_file"
+            head -n 20 "$OUTPUT_DIR/reports/protocol_hierarchy.txt" | sed -n '1,10p' >> "$summary_file"
+        fi
+
+        # Warnings / Errors counts (if any counters exist)
+        if [[ ${#MISSING_TOOLS[@]} -gt 0 ]]; then
+            echo "Missing required tools: ${MISSING_TOOLS[*]}" >> "$summary_file"
+        fi
+        
+        if [[ ${#MISSING_OPTIONAL_TOOLS[@]} -gt 0 ]]; then
+        echo "Missing optional tools: ${MISSING_OPTIONAL_TOOLS[*]}" >> "$summary_file"
+        fi
+
+         # Timeline info
+        if [[ -f "$OUTPUT_DIR/timeline/events.txt" ]]; then
+            echo "Timeline events: $(wc -l < "$OUTPUT_DIR/timeline/events.txt" 2>/dev/null || echo 0)" >> "$summary_file"
+        fi
+
+        # CTF hits
+        if [[ -f "$OUTPUT_DIR/ctf/ctf_search_results.txt" ]]; then
+            local ctf_hits
+            ctf_hits=$(grep -i -c "." "$OUTPUT_DIR/ctf/ctf_search_results.txt" 2>/dev/null || echo 0)
+            echo "CTF pattern hits: $ctf_hits" >> "$summary_file"
         fi
     } > "$summary_file"
     
@@ -1622,12 +1719,15 @@ main() {
     # Parse command line arguments (ENHANCED)
     while [[ $# -gt 0 ]]; do
         case $1 in
-            -ctf)
+            -c|--ctf)
                 if [[ -n "${2:-}" ]]; then
-                    CTF_KEYWORDS+=("$2")
+                    # allow both -ctf KEYWORD and -c KEYWORD compatibility
+                    CTF_KEYWORDS+=("$2"
+                    )
+                    CTF_PATTERN="$2"
                     shift 2
                 else
-                    print_status "ERROR" "Option -ctf requires a keyword argument"
+                    print_status "ERROR" "Option -c/--ctf requires a keyword argument"
                     exit 2
                 fi
                 ;;
@@ -1674,12 +1774,18 @@ main() {
                 RUN_ENTROPY="true"
                 shift
                 ;;
-            -quick)
+             -q|--quick)
                 quick_mode=true
+                MODE="quick"
                 shift
                 ;;
-            -deep)
+            -d|--deep)
                 deep_mode=true
+                MODE="deep"
+                shift
+                ;;
+            -i|--interactive)
+                INTERACTIVE_MODE="true"
                 shift
                 ;;
             -timeline)
@@ -1697,6 +1803,15 @@ main() {
             -tools)
                 show_tools_flag=true
                 shift
+                ;;
+            -o|--output)
+                if [[ -n "${2:-}" ]]; then
+                    CUSTOM_OUTPUT_DIR="$2"
+                    shift 2
+                else
+                    print_status "ERROR" "Option -o/--output requires a directory path"
+                    exit 2
+                fi
                 ;;
             -h|--help)
                 show_help=true
@@ -1774,6 +1889,18 @@ main() {
     # Run analysis modules based on mode
     local analysis_exit_code=0
     
+    # If interactive flag set, hand control to menu
+    if [[ "$INTERACTIVE_MODE" == "true" ]]; then
+        # Ensure INPUT_FILE set
+        INPUT_FILE="${input_file:-$INPUT_FILE}"
+        interactive_menu "${INPUT_FILE}"
+        # After interactive returns, generate summary
+        generate_summary
+        exit 0
+    fi
+
+    # Non-interactive normal execution follows...
+
     if [[ "$meta_only" == "true" ]]; then
         extract_metadata "$INPUT_FILE" || analysis_exit_code=$?
     elif [[ "$stats_only" == "true" ]]; then
@@ -1795,6 +1922,8 @@ main() {
         # CTF keyword search if keywords provided
         if [[ ${#CTF_KEYWORDS[@]} -gt 0 ]]; then
             search_ctf_keywords "$INPUT_FILE" || analysis_exit_code=$?
+            local out_file="$OUTPUT_DIR/ctf/ctf_search_results.txt"
+            mkdir -p "$OUTPUT_DIR/ctf"
         fi
         
         # Timeline if requested
@@ -1827,11 +1956,6 @@ main() {
         export_results "$EXPORT_FORMAT" || analysis_exit_code=$?
     fi
     
-    # Generate interactive timeline if requested
-    if [[ "$TIMELINE_MODE" == "true" ]]; then
-        generate_timeline_html || analysis_exit_code=$?
-    fi
-    
     # Run parallel analyses if enabled
     if [[ "$ENABLE_PARALLEL" == "true" ]]; then
         run_parallel || analysis_exit_code=$?
@@ -1860,6 +1984,14 @@ main() {
         exit $analysis_exit_code
     fi
     
+    find "$OUTPUT_DIR" -type d -empty -delete  # Clean up empty dirs
+
+    [[ -d "$OUTPUT_DIR/timeline" && "$(ls -A "$OUTPUT_DIR/timeline")" ]] && \
+        print_status "INFO" "Timeline: $OUTPUT_DIR/timeline"
+
+    [[ -d "$OUTPUT_DIR/ctf" && "$(ls -A "$OUTPUT_DIR/ctf")" ]] && \
+        print_status "INFO" "CTF results: $OUTPUT_DIR/ctf"
+
     exit 0
 }
 
