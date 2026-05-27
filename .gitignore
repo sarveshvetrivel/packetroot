@@ -1,41 +1,86 @@
+# =============================================================================
 # PacketRoot .gitignore
+# =============================================================================
 
 # Output directories
 output/
 results/
+analysis/
+reports/
+exports/
 
-# PCAP files (except in tests directory)
+# Generated artifacts
+*.json
+*.csv
+*.html
+*.xml
+
+# PCAP files (except test samples)
 *.pcap
-!tests/test_data/*.pcap
 *.pcapng
-!tests/test_data/*.pcapng
 *.cap
+*.pcap.gz
 
-# Log files
+!tests/test_data/
+!tests/test_data/*.pcap
+!tests/test_data/*.pcapng
+
+# Logs
 *.log
 *.txt.log
 
-# Temporary files
+# Temporary/runtime files
 *.tmp
 *.temp
+*.cache
+*.pid
+*.lock
 *.swp
 *.swo
 *~
 
-# Editor files
-.vscode/
-.idea/
-*.sublime-*
+# Bash/debug artifacts
+bash-debug.log
+set-x.log
 
-# Python cache (if any Python scripts are added)
+# Core dumps
+core
+*.core
+core.*
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+
+# Python artifacts
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.python-version
+.venv/
+venv/
+env/
 
-# Ruby cache (for zsteg and other gems)
+# Ruby/Gem artifacts
 .bundle/
 vendor/
+*.gem
+
+# Node.js (future web UI/support tooling)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.sublime-*
+*.code-workspace
 
 # OS generated files
 .DS_Store
@@ -43,48 +88,45 @@ vendor/
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
 Thumbs.db
+ehthumbs.db
 
-# Compressed files that might be extracted
+# Archives / extracted files
 *.zip
+*.tar
 *.tar.gz
 *.tgz
 *.rar
 *.7z
 
-# Binary executables
+# Binary files
 *.exe
 *.dll
 *.bin
+*.o
+*.a
+*.out
 
-# Core dumps
-core
-*.core
-
-# Backup files
-*.bak
-*.backup
-*.old
-
-# Large data files
-*.dump
-*.dmp
-
-# Test files (if any)
-test_captures/
+# Test artifacts
 test_output/
+test_captures/
+coverage/
+*.coverage
 
 # Documentation build artifacts
 docs/_build/
+site/
 *.pdf
 
-# IDE and editor specific
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Local configuration
-config.local
+# Local environment/configuration
 .env
+.env.*
+config.local
+config.dev
+config.test
+
+# Installer/runtime logs
+packetroot-install.log
+
+# ShellCheck / BATS artifacts
+*.bats~
