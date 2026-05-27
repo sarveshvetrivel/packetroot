@@ -71,11 +71,10 @@ sudo ./install.sh --full
     -   Bandwidth usage and throughput analysis
     -   Flow reconstruction and analysis
 -   **Security & Forensics**
-    -   Suspicious pattern detection
-    -   Known IOCs (Indicators of Compromise) matching
-    -   Anomaly detection in network behavior
+    -   IDS integration via Zeek and Suricata
+    -   Protocol-specific threat hunting
     -   Credential hunting in plaintext protocols
-    -   Malware traffic pattern identification
+    -   Network event timeline visualization
 -   **CTF & Investigation Tools**
     -   Custom keyword/flag pattern matching
     -   File carving with multiple tools (binwalk, foremost, scalpel)
@@ -209,7 +208,7 @@ have helped improve PacketRoot.
 PacketRoot organizes analysis results in a structured directory format:
 
     output/
-    ├── capture_20230815_143022/       # Timestamped analysis directory
+    ├── capture_20260527_143022/       # Timestamped analysis directory
     │   ├── reports/                   # Analysis reports and statistics
     │   │   ├── summary.txt           # Executive summary
     │   │   ├── traffic_analysis.txt   # Traffic analysis
@@ -218,12 +217,10 @@ PacketRoot organizes analysis results in a structured directory format:
     │   │
     │   ├── protocols/                 # Protocol-specific extractions
     │   │   ├── http/                  # HTTP requests/responses
-    │   │   │   ├── requests/         # Individual HTTP requests
-    │   │   │   └── responses/        # Individual HTTP responses
     │   │   ├── dns/                  # DNS queries/responses
     │   │   └── tls/                  # TLS/SSL certificates
     │   │
-    │   ├── extracted/                # Extracted files and objects
+    │   ├── objects/                  # Extracted files and objects
     │   │   ├── http_objects/         # Files from HTTP traffic
     │   │   ├── dns_objects/          # Files from DNS exfiltration
     │   │   └── carved_files/         # Files carved from raw traffic
@@ -234,7 +231,8 @@ PacketRoot organizes analysis results in a structured directory format:
     │   │
     │   ├── logs/                     # Tool-specific log files
     │   ├── timeline/                 # Timeline analysis
-    │   └── index.html                # HTML report (if generated)
+    │   │   └── interactive_timeline.html # Interactive HTML report
+    │   └── index.md                  # Markdown report summary
 
 
 ## 📜 License
