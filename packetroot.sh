@@ -2,7 +2,7 @@
 
 # =============================================================================
 # PacketRoot - Advanced PCAP/PCAPNG Forensic & CTF Analysis Toolkit
-# Version: 2.0.0 Enhanced Edition
+# Version: 2.0.1 Enhanced Edition
 # Author: Sarvesh Vetrivel
 # GitHub: https://github.com/sarveshvetrivel/packetroot
 # License: Apache 2.0
@@ -31,8 +31,8 @@ IFS=$'\n\t'
 readonly SCRIPT_NAME="${0##*/}"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 readonly OUTPUT_BASE_DIR="${SCRIPT_DIR}/output"
-readonly VERSION="2.0.0"
-readonly RELEASE_DATE="2025-09-01"
+readonly VERSION="2.0.1"
+readonly RELEASE_DATE="2026-05-27"
 readonly MINIMUM_BASH_VERSION=4.2
 readonly MINIMUM_TSHARK_VERSION=3.0.0
 readonly TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
@@ -74,11 +74,10 @@ cleanup() {
     
     # Cleanup temporary files
     if [[ ${#CLEANUP_FILES[@]} -gt 0 ]]; then
-        rm -f "${CLEANUP_FILES[@]}" 2>/dev/null || true
+        for f in "${CLEANUP_FILES[@]}"; do
+            [[ -n "$f" && -e "$f" ]] && rm -f "$f" 2>/dev/null || true
+        done
     fi
-    
-    # Restore original directory
-    popd &>/dev/null || true
     
     exit $exit_code
 }
@@ -589,7 +588,26 @@ generate_timeline_html() {
 
     print_status "INFO" "Generating interactive HTML timeline..."
 
-    cat > "$html_file" << 'EOF'
+    local plot_data_js="$OUTPUT_DIR/timeline/plot_data.js"
+    awk -F'\t' '{split($1, a, "\\."); print a[1]}' "$timeline_file" | sort | uniq -c | awk '
+    BEGIN { x=""; y=""; first=1 }
+    {
+        count=$1
+        $1=""
+        sub(/^ /, "", $0)
+        if(!first) { x=x", "; y=y", " }
+        x=x"\""$0"\""
+        y=y""count
+        first=0
+    }
+    END {
+        print "var x_data = ["x"];\nvar y_data = ["y"];"
+    }' > "$plot_data_js"
+
+    local data_js
+    data_js=$(cat "$plot_data_js" 2>/dev/null || echo "var x_data=[]; var y_data=[];")
+
+    cat > "$html_file" << EOF
 <!DOCTYPE html>
 <html>
 <head>
@@ -607,10 +625,11 @@ body { font-family: Arial, sans-serif; margin: 20px; }
 </div>
 <div id="timeline" style="width:100%;height:600px;"></div>
 <script>
-// Sample visualization - replace with actual timeline data parsing
+$data_js
+
 var trace = {
-    x: ['2025-01-01 00:00', '2025-01-01 01:00', '2025-01-01 02:00'],
-    y: [100, 150, 80],
+    x: x_data,
+    y: y_data,
     type: 'scatter',
     mode: 'lines+markers',
     name: 'Packet Traffic'
@@ -629,6 +648,7 @@ Plotly.newPlot('timeline', data, layout);
 </html>
 EOF
 
+    rm -f "$plot_data_js"
     print_status "SUCCESS" "Generated interactive timeline at $html_file"
 }
 
@@ -706,15 +726,33 @@ run_parallel() {
 
     print_status "INFO" "Starting parallel analysis modules..."
     
-    # Run additional analyses in parallel
-    analyze_icmp "$INPUT_FILE" &
-    analyze_voip "$INPUT_FILE" &
-    analyze_additional_protocols "$INPUT_FILE" &
+    local -a pids=()
     
-    # Wait for all background processes to complete
-    wait
+    # Run additional analyses in parallel based on flags
+    if [[ "$RUN_ICMP" == "true" ]] || [[ "$deep_mode" == "true" ]]; then
+        analyze_icmp "$INPUT_FILE" &
+        pids+=("$!")
+    fi
+    if [[ "$RUN_VOIP" == "true" ]] || [[ "$deep_mode" == "true" ]]; then
+        analyze_voip "$INPUT_FILE" &
+        pids+=("$!")
+    fi
+    if [[ "$deep_mode" == "true" ]]; then
+        analyze_additional_protocols "$INPUT_FILE" &
+        pids+=("$!")
+    fi
     
-    print_status "INFO" "Parallel analysis modules completed"
+    # Wait for all background processes to complete safely
+    local success=true
+    for pid in "${pids[@]}"; do
+        wait "$pid" || success=false
+    done
+    
+    if [[ "$success" == "true" ]]; then
+        print_status "SUCCESS" "Parallel analysis modules completed"
+    else
+        print_status "WARN" "Some parallel analysis modules encountered errors"
+    fi
 }
 
 # Function to extract file metadata with comprehensive error handling
@@ -869,7 +907,7 @@ extract_metadata() {
         # Calculate and log processing time
         local end_time
         end_time=$(date +%s)
-        local duration=$((end_time - ${start_time:-end_time}))
+        local duration=$((end_time - ${start_time:-$end_time}))
         
         print_status "SUCCESS" "Metadata extraction completed in ${duration} seconds"
         print_status "INFO" "Results saved to: $output_file"
@@ -928,8 +966,7 @@ analyze_traffic() {
     local total_analyses=0
     
     # ENHANCED: Define analyses to run including new protocol support
-    # ENHANCED: Define analyses to run including new protocol support
-local -a analyses=(
+    local -a analyses=(
     "I/O statistics" "io,stat,0" "$reports_dir/io_stats.txt"
     "Protocol hierarchy" "io,phs" "$reports_dir/protocol_hierarchy.txt"
     "IP endpoints" "endpoints,ip" "$reports_dir/ip_endpoints.txt"
@@ -1394,8 +1431,7 @@ generate_timeline() {
     fi
     
     if check_tool "tshark"; then
-        local timeline_cmd="tshark -r \"$input_file\" -T fields -e frame.time -e ip.src -e ip.dst -e frame.protocols -e frame.len | sort"
-        run_command "$timeline_cmd" "$misc_dir/timeline.txt" "Chronological timeline generation"
+        run_command "$misc_dir/timeline.txt" "Chronological timeline generation" bash -c "tshark -r \"$input_file\" -T fields -e frame.time -e ip.src -e ip.dst -e frame.protocols -e frame.len | sort"
         print_status "SUCCESS" "Timeline generation completed"
     else
         print_status "ERROR" "tshark not available - skipping timeline generation"
@@ -1622,8 +1658,12 @@ main() {
     # Parse command line arguments (ENHANCED)
     while [[ $# -gt 0 ]]; do
         case $1 in
-            -ctf)
+            -ctf|--ctf)
                 if [[ -n "${2:-}" ]]; then
+                    if [[ "$2" =~ [\&\|\;\<\>\$\`\\] ]]; then
+                        print_status "ERROR" "CTF keyword contains dangerous characters"
+                        exit 2
+                    fi
                     CTF_KEYWORDS+=("$2")
                     shift 2
                 else
@@ -1631,7 +1671,7 @@ main() {
                     exit 2
                 fi
                 ;;
-            -proto)
+            -proto|--proto)
                 if [[ -n "${2:-}" ]]; then
                     PROTOCOLS+=("$2")
                     shift 2
@@ -1640,7 +1680,7 @@ main() {
                     exit 2
                 fi
                 ;;
-            -export)
+            -export|--export)
                 if [[ -n "${2:-}" ]]; then
                     EXPORT_FORMAT="$2"
                     shift 2
@@ -1649,7 +1689,16 @@ main() {
                     exit 2
                 fi
                 ;;
-            -config)
+            -o|--output)
+                if [[ -n "${2:-}" ]]; then
+                    CUSTOM_OUTPUT_DIR="$(realpath -m "$2")"
+                    shift 2
+                else
+                    print_status "ERROR" "Option -o requires a directory argument"
+                    exit 2
+                fi
+                ;;
+            -config|--config)
                 if [[ -n "${2:-}" ]]; then
                     CONFIG_FILE="$2"
                     shift 2
@@ -1658,43 +1707,47 @@ main() {
                     exit 2
                 fi
                 ;;
-            -parallel)
+            -parallel|--parallel)
                 ENABLE_PARALLEL="true"
                 shift
                 ;;
-            -icmp)
+            -plugins|--plugins)
+                ENABLE_PLUGINS="true"
+                shift
+                ;;
+            -icmp|--icmp)
                 RUN_ICMP="true"
                 shift
                 ;;
-            -voip)
+            -voip|--voip)
                 RUN_VOIP="true"
                 shift
                 ;;
-            -entropy)
+            -entropy|--entropy)
                 RUN_ENTROPY="true"
                 shift
                 ;;
-            -quick)
+            -quick|--quick)
                 quick_mode=true
                 shift
                 ;;
-            -deep)
+            -deep|--deep)
                 deep_mode=true
                 shift
                 ;;
-            -timeline)
+            -timeline|--timeline)
                 TIMELINE_MODE="true"
                 shift
                 ;;
-            -stats)
+            -stats|--stats)
                 stats_only=true
                 shift
                 ;;
-            -meta)
+            -meta|--meta)
                 meta_only=true
                 shift
                 ;;
-            -tools)
+            -tools|--tools)
                 show_tools_flag=true
                 shift
                 ;;
@@ -1753,6 +1806,11 @@ main() {
     
     # Convert to absolute path
     INPUT_FILE="$(realpath "$input_file")"
+
+    if [[ "$INPUT_FILE" =~ [\&\|\;\<\>\(\)\$\`\\\"\'\*] ]]; then
+        print_status "ERROR" "Input filename contains dangerous characters. Please rename the file."
+        exit 6
+    fi
     
     # Display banner with analysis info - ONLY ONCE AT THE START
     local analysis_type="Full Analysis"
@@ -1804,17 +1862,21 @@ main() {
     fi
     
     # NEW: Run additional analysis modules
-    if [[ "$RUN_ICMP" == "true" ]] || [[ "$deep_mode" == "true" ]]; then
-        analyze_icmp "$INPUT_FILE" || analysis_exit_code=$?
-    fi
-    
-    if [[ "$RUN_VOIP" == "true" ]] || [[ "$deep_mode" == "true" ]]; then
-        analyze_voip "$INPUT_FILE" || analysis_exit_code=$?
-    fi
-    
-    # Run additional protocol analysis
-    if [[ "$deep_mode" == "true" ]]; then
-        analyze_additional_protocols "$INPUT_FILE" || analysis_exit_code=$?
+    if [[ "$ENABLE_PARALLEL" == "true" ]]; then
+        run_parallel || analysis_exit_code=$?
+    else
+        if [[ "$RUN_ICMP" == "true" ]] || [[ "$deep_mode" == "true" ]]; then
+            analyze_icmp "$INPUT_FILE" || analysis_exit_code=$?
+        fi
+        
+        if [[ "$RUN_VOIP" == "true" ]] || [[ "$deep_mode" == "true" ]]; then
+            analyze_voip "$INPUT_FILE" || analysis_exit_code=$?
+        fi
+        
+        # Run additional protocol analysis
+        if [[ "$deep_mode" == "true" ]]; then
+            analyze_additional_protocols "$INPUT_FILE" || analysis_exit_code=$?
+        fi
     fi
     
     # Run entropy analysis if requested or in deep mode
@@ -1830,11 +1892,6 @@ main() {
     # Generate interactive timeline if requested
     if [[ "$TIMELINE_MODE" == "true" ]]; then
         generate_timeline_html || analysis_exit_code=$?
-    fi
-    
-    # Run parallel analyses if enabled
-    if [[ "$ENABLE_PARALLEL" == "true" ]]; then
-        run_parallel || analysis_exit_code=$?
     fi
     
     # Generate summary report
@@ -1860,6 +1917,15 @@ main() {
         exit $analysis_exit_code
     fi
     
+    # Exit with appropriate code
+    if [[ $analysis_exit_code -eq 10 ]]; then
+        print_status "WARN" "Analysis completed but security issues were detected"
+        exit 10
+    elif [[ $analysis_exit_code -ne 0 ]]; then
+        print_status "WARN" "Analysis completed with some errors (exit code: $analysis_exit_code)"
+        exit $analysis_exit_code
+    fi
+    
     exit 0
 }
 
@@ -1867,4 +1933,3 @@ main() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi
-
