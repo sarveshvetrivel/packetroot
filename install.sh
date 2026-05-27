@@ -2,7 +2,7 @@
 
 # =============================================================================
 # PacketRoot Installation Script
-# Version: 1.0.1
+# Version: 2.0.1
 # Author: Sarvesh Vetrivel
 # GitHub: https://github.com/sarveshvetrivel/packetroot
 # License: Apache 2.0
@@ -42,13 +42,13 @@ fi
 # Constants
 readonly SCRIPT_NAME="${0##*/}"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
-readonly PACKETROOT_VERSION="1.0.1"
-readonly RELEASE_DATE="2025-08-14"
+readonly PACKETROOT_VERSION="2.0.1"
+readonly RELEASE_DATE="2026-05-27"
 readonly MINIMUM_BASH_VERSION=4.2
 readonly MINIMUM_TSHARK_VERSION=3.0.0
-readonly INSTALL_PREFIX="/usr/local"
-readonly CONFIG_DIR="/etc/packetroot"
-readonly LOG_FILE="/var/log/packetroot-install.log"
+readonly INSTALL_PREFIX="${PREFIX:-/usr/local}"
+readonly CONFIG_DIR="${SYSCONFDIR:-/etc}/packetroot"
+readonly LOG_FILE="${LOGDIR:-/var/log}/packetroot-install.log"
 
 # Global variables
 declare -a MISSING_TOOLS=()
@@ -623,17 +623,45 @@ install_dependencies() {
     print_status "INFO" "Package installation summary: $success_count successful, $failed_count failed"
     
     # Install Python packages for full mode
-    if [[ "$INSTALL_MODE" == "full" && -x "$(command -v pip3)" ]]; then
-        print_status "PROGRESS" "Installing Python packages..."
-        local python_packages=("scapy" "pylibpcap" "pyshark" "pyyaml")
-        
-        for py_pkg in "${python_packages[@]}"; do
-            if timeout 120 pip3 install --upgrade "$py_pkg" >> "$LOG_FILE" 2>&1; then
-                print_status "SUCCESS" "Installed Python package: $py_pkg"
+    if [[ "$INSTALL_MODE" == "full" ]]; then
+        if [[ -x "$(command -v pip3)" ]]; then
+            print_status "PROGRESS" "Installing Python packages..."
+            local python_packages=("scapy" "pylibpcap" "pyshark" "pyyaml")
+            
+            for py_pkg in "${python_packages[@]}"; do
+                if timeout 120 pip3 install --upgrade "$py_pkg" >> "$LOG_FILE" 2>&1; then
+                    print_status "SUCCESS" "Installed Python package: $py_pkg"
+                else
+                    print_status "WARN" "Failed to install Python package: $py_pkg"
+                fi
+            done
+        fi
+
+        # Install zsteg via gem if ruby is available
+        if [[ -x "$(command -v gem)" ]]; then
+            print_status "PROGRESS" "Installing zsteg (Ruby gem)..."
+            if timeout 300 gem install zsteg >> "$LOG_FILE" 2>&1; then
+                print_status "SUCCESS" "Installed zsteg"
             else
-                print_status "WARN" "Failed to install Python package: $py_pkg"
+                print_status "WARN" "Failed to install zsteg gem"
             fi
-        done
+        fi
+
+        # Install stegsolve (Java-based)
+        print_status "PROGRESS" "Installing StegSolve..."
+        local stegsolve_dir="/usr/local/share/stegsolve"
+        mkdir -p "$stegsolve_dir"
+        if curl -sL "https://github.com/Giotino/stegsolve/releases/download/v1.5/stegsolve.jar" -o "$stegsolve_dir/stegsolve.jar" >> "$LOG_FILE" 2>&1; then
+            print_status "SUCCESS" "Downloaded StegSolve"
+            # Create a wrapper script
+            cat > "/usr/local/bin/stegsolve" <<EOF
+#!/bin/bash
+java -jar $stegsolve_dir/stegsolve.jar "\$@"
+EOF
+            chmod +x "/usr/local/bin/stegsolve"
+        else
+            print_status "WARN" "Failed to download StegSolve"
+        fi
     fi
     
     # Return success if we installed at least some core tools
@@ -1371,4 +1399,3 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # Run the main function with all arguments
     main "$@"
 fi
-
